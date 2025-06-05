@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Design de Controle ESP32 Offline</title>
+    <!-- REMOVIDO: Link para Tailwind CSS CDN -->
+    <!-- REMOVIDO: Link para Google Fonts (Inter) -->
+    <style>
+        /* Estilos Base (Desktop - "Consolezinho") */
+        html, body {
+            font-family: Arial, Helvetica, sans-serif; /* ALTERADO: Usando fontes padrão do sistema */
+            background-color: #1a202c; /* Fundo escuro */
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            display: flex; /* Usado para centralizar o consolezinho no desktop */
+            justify-content: center;
+            align-items: center;
+            -webkit-tap-highlight-color: transparent; /* Remove o destaque azul ao tocar em botões no mobile */
+        }
+
+        .controller-body {
+            background-color: #2d3748; /* Corpo do controle - cinza escuro */
+            border-radius: 35px;
+            padding: 40px 50px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            max-width: 600px;
+            min-height: 250px;
+            box-shadow: 0 14px 28px rgba(0, 0, 0, 0.35), 0 10px 10px rgba(0, 0, 0, 0.3);
+            border: 1px solid #4a5568;
+            position: relative;
+            transition: all 0.3s ease-in-out;
+            box-sizing: border-box; /* Garante que padding e border não aumentem o tamanho total */
+        }
+
+        .controls-cluster-left,
+        .controls-cluster-right {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 25px;
+        }
+
+        .d-pad-modern {
+            position: relative;
+            width: 140px;
+            height: 140px;
+            background-color: #4a5568;
+            border-radius: 50%;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            box-shadow: inset 0 0 12px rgba(0,0,0,0.5);
+            border: 2px solid #22272e;
+        }
+
+        .d-pad-modern-button {
+            background-color: #718096;
+            color: #1a202c;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 26px;
+            cursor: pointer;
+            transition: background-color 0.2s ease, transform 0.1s ease;
+            border: 1px solid #4a5568;
+            z-index: 1;
+            user-select: none; /* Impede a seleção de texto nos botões */
+        }
+        .d-pad-modern-button:hover {
+            background-color: #a0aec0;
+        }
+        .d-pad-modern-button:active {
+            background-color: #4a5568;
+            transform: scale(0.95);
+        }
+
+        .d-pad-modern-button.up    { grid-column: 2; grid-row: 1; border-radius: 25px 25px 8px 8px; }
+        .d-pad-modern-button.left  { grid-column: 1; grid-row: 2; border-radius: 25px 8px 8px 25px; }
+        .d-pad-modern-button.center{ grid-column: 2; grid-row: 2; background-color: #2d3748; border-radius: 50%; width: 35%; height: 35%; margin: auto; border: none; cursor: default;}
+        .d-pad-modern-button.right { grid-column: 3; grid-row: 2; border-radius: 8px 25px 25px 8px; }
+        .d-pad-modern-button.down  { grid-column: 2; grid-row: 3; border-radius: 8px 8px 25px 25px; }
+
+        .center-buttons-container {
+            position: absolute;
+            bottom: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+        }
+
+        .menu-button {
+            background-color: #4a5568;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            border: 1px solid #2d3748;
+            box-shadow: 0 3px 5px rgba(0,0,0,0.25);
+            transition: background-color 0.2s, transform 0.1s;
+            user-select: none;
+        }
+        .menu-button:hover {
+            background-color: #718096;
+        }
+         .menu-button:active {
+            transform: scale(0.9);
+            background-color: #2d3748;
+        }
+
+        .action-buttons-diamond {
+            display: grid;
+            grid-template-areas:
+                ".  y ."
+                "x . b"
+                ". a .";
+            grid-template-columns: repeat(3, 60px);
+            grid-template-rows: repeat(3, 60px);
+            gap: 8px;
+            width: calc(60px * 3 + 8px * 2);
+            height: calc(60px * 3 + 8px * 2);
+            align-items: center;
+            justify-items: center;
+        }
+
+        .action-button-diamond {
+            color: white;
+            width: 58px;
+            height: 58px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: filter 0.2s ease, transform 0.1s ease;
+            box-shadow: 0 4px 7px rgba(0, 0, 0, 0.3);
+            border-width: 2px;
+            border-style: solid;
+            user-select: none;
+        }
+        .action-button-diamond:hover {
+            filter: brightness(1.15);
+        }
+        .action-button-diamond:active {
+            transform: scale(0.92);
+            filter: brightness(0.85);
+        }
+
+        .btn-y { background-color: #FFD700; border-color: #cca300; grid-area: y; color: #2d3748;}
+        .btn-x { background-color: #4299e1; border-color: #2b6cb0; grid-area: x; }
+        .btn-b { background-color: #f56565; border-color: #c53030; grid-area: b; }
+        .btn-a { background-color: #48bb78; border-color: #2f855a; grid-area: a; }
+
+
+        /* Estilos para Desktop Menor (ainda consolezinho, mas mais compacto) */
+        @media (max-width: 630px) and (min-width: 769px) {
+            .controller-body {
+                padding: 30px 40px;
+                gap: 20px;
+                max-width: 480px;
+            }
+            .d-pad-modern {
+                width: 120px;
+                height: 120px;
+            }
+            .d-pad-modern-button {
+                font-size: 22px;
+            }
+            .action-buttons-diamond {
+                grid-template-columns: repeat(3, 50px);
+                grid-template-rows: repeat(3, 50px);
+                width: calc(50px * 3 + 6px * 2);
+                height: calc(50px * 3 + 6px * 2);
+            }
+            .action-button-diamond {
+                width: 48px;
+                height: 48px;
+                font-size: 20px;
+            }
+            .menu-button {
+                width: 35px;
+                height: 35px;
+                font-size: 16px;
+            }
+        }
+
+
+        /* Estilos para Celular e Tablet (Tela Cheia) */
+        @media (max-width: 768px) {
+            html, body {
+                overflow: hidden;
+            }
+
+            .controller-body {
+                width: 100%;
+                height: 100%;
+                max-width: none;
+                min-height: 0;
+                border-radius: 0;
+                flex-direction: row;
+                justify-content: space-around;
+                align-items: center;
+                padding: clamp(15px, 5vw, 40px);
+                box-shadow: none;
+                background-color: #22272e;
+            }
+
+            .controls-cluster-left,
+            .controls-cluster-right {
+                flex-grow: 1;
+                flex-basis: 0;
+                max-width: 48%;
+                height: 100%;
+                justify-content: center;
+            }
+
+            .d-pad-modern {
+                width: clamp(140px, 40vmin, 250px);
+                height: clamp(140px, 40vmin, 250px);
+            }
+            .d-pad-modern-button {
+                font-size: clamp(24px, 7vmin, 36px);
+            }
+             .d-pad-modern-button.center{
+                width: clamp(35px, 12vmin, 70px);
+                height: clamp(35px, 12vmin, 70px);
+            }
+
+
+            .action-buttons-diamond {
+                width: clamp(140px, 40vmin, 250px);
+                height: clamp(140px, 40vmin, 250px);
+                grid-template-columns: repeat(3, 1fr);
+                grid-template-rows: repeat(3, 1fr);
+                gap: clamp(6px, 2.5vmin, 15px);
+            }
+            .action-button-diamond {
+                width: clamp(45px, 13vmin, 80px);
+                height: clamp(45px, 13vmin, 80px);
+                font-size: clamp(18px, 6vmin, 32px);
+            }
+
+            .center-buttons-container {
+                position: absolute;
+                bottom: clamp(15px, 4vh, 30px);
+                width: auto;
+                z-index: 10;
+                gap: clamp(15px, 4vw, 25px);
+            }
+            .menu-button {
+                width: clamp(40px, 10vmin, 60px);
+                height: clamp(40px, 10vmin, 60px);
+                font-size: clamp(16px, 4.5vmin, 22px);
+            }
+
+            @media (max-height: 480px) and (orientation: landscape) {
+                .d-pad-modern, .action-buttons-diamond {
+                    width: clamp(110px, 35vmin, 200px);
+                    height: clamp(110px, 35vmin, 200px);
+                }
+                .action-button-diamond {
+                     width: clamp(35px, 9vmin, 70px);
+                     height: clamp(35px, 9vmin, 70px);
+                }
+                .center-buttons-container {
+                    bottom: clamp(8px, 2.5vh, 20px);
+                }
+                 .menu-button {
+                    width: clamp(35px, 9vmin, 50px);
+                    height: clamp(35px, 9vmin, 50px);
+                }
+            }
+        }
+
+    </style>
+</head>
+<body>
+    <div class="controller-body">
+        <!-- Lado Esquerdo: D-Pad -->
+        <div class="controls-cluster-left">
+            <div class="d-pad-modern">
+                <button class="d-pad-modern-button up" aria-label="Cima"><span>&#9650;</span></button>
+                <button class="d-pad-modern-button left" aria-label="Esquerda"><span>&#9664;</span></button>
+                <div class="d-pad-modern-button center"></div>
+                <button class="d-pad-modern-button right" aria-label="Direita"><span>&#9654;</span></button>
+                <button class="d-pad-modern-button down" aria-label="Baixo"><span>&#9660;</span></button>
+            </div>
+        </div>
+
+        <!-- Lado Direito: Botões de Ação -->
+        <div class="controls-cluster-right">
+            <div class="action-buttons-diamond">
+                <button class="action-button-diamond btn-y" aria-label="Botão Y">Y</button>
+                <button class="action-button-diamond btn-x" aria-label="Botão X">X</button>
+                <button class="action-button-diamond btn-b" aria-label="Botão B">B</button>
+                <button class="action-button-diamond btn-a" aria-label="Botão A">A</button>
+            </div>
+        </div>
+
+        <!-- Botões Centrais (View/Menu) -->
+        <div class="center-buttons-container">
+            <button class="menu-button" aria-label="Botão View"><span>&#9776;</span></button>
+            <button class="menu-button" aria-label="Botão Menu"><span>&#9636;</span></button>
+        </div>
+    </div>
+
+    <script>
+        // Script para feedback visual básico
+        const allButtons = document.querySelectorAll('.d-pad-modern-button, .action-button-diamond, .menu-button');
+
+        allButtons.forEach(button => {
+            button.addEventListener('mousedown', (e) => { e.preventDefault(); });
+
+            button.addEventListener('touchstart', (e) => {
+                e.preventDefault(); // Previne comportamento padrão do navegador
+                // Adiciona uma classe para o estado ativo, permitindo estilização mais complexa via CSS se necessário
+                // e.currentTarget.classList.add('active-touch'); // Descomente se quiser usar classes CSS para o estado ativo
+                
+                // Mantém transformações diretas para feedback imediato
+                e.currentTarget.style.transform = 'scale(0.92)';
+                if (e.currentTarget.classList.contains('action-button-diamond')) {
+                    e.currentTarget.style.filter = 'brightness(0.85)';
+                } else if (e.currentTarget.classList.contains('d-pad-modern-button') && !e.currentTarget.classList.contains('center')) {
+                     e.currentTarget.style.backgroundColor = '#4a5568';
+                } else if (e.currentTarget.classList.contains('menu-button')) {
+                     e.currentTarget.style.backgroundColor = '#2d3748';
+                }
+            }, { passive: false }); // passive: false é importante para permitir preventDefault em eventos de toque
+
+            button.addEventListener('touchend', (e) => {
+                // e.currentTarget.classList.remove('active-touch'); // Descomente se usar classes CSS
+                e.currentTarget.style.transform = ''; // Reseta a transformação
+                if (e.currentTarget.classList.contains('action-button-diamond')) {
+                    e.currentTarget.style.filter = '';
+                } else if (e.currentTarget.classList.contains('d-pad-modern-button') && !e.currentTarget.classList.contains('center')) {
+                     e.currentTarget.style.backgroundColor = ''; // Reseta a cor de fundo
+                } else if (e.currentTarget.classList.contains('menu-button')) {
+                     e.currentTarget.style.backgroundColor = ''; // Reseta a cor de fundo
+                }
+            });
+        });
+    </script>
+</body>
+</html>
